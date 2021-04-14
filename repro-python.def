@@ -1,0 +1,17 @@
+Bootstrap: docker
+From: jupyter/minimal-notebook:8d32a5208ca1
+
+%post
+  apt update && apt install -y python3-distutils && apt clean
+  mamba install --quiet --yes 'poetry=1.1.*' 'ipywidgets=7.6.*' 'ipympl=0.7.*' 'widgetsnbextension=3.5.*'
+  mamba clean --all -f -y
+  echo "c.MappingKernelManager.default_kernel_name='singularity'" > /jupyter-conf.py
+
+%environment
+  export POETRY_VIRTUALENVS_IN_PROJECT=1
+
+%runscript
+  poetry install
+  poetry run python -m ipykernel install --user --name=singularity
+  jupyter lab --config=/jupyter-conf.py
+  jupyter kernelspec remove -f singularity
