@@ -1,0 +1,182 @@
+#+PROPERTY: header-args:shell :session *shell* :results silent
+
+* Reproducible Python
+***  (for fun and +profit+ citations)
+
+    /with/ Jonathan Page /on/ 2021–04–14
+
+
+* So you use Python
+
+  * Python is cool and all
+  * But now you have 3 different Pythons installed
+  * Who knows which install has the right scipy?
+
+
+* ... or someone else did?
+
+  * The person who wrote that one script graduated
+  * and they don't respond to emails
+  * and it only runs on one machine :sob:
+
+
+* We can do better!
+
+  and I'm here to show you how!
+
+(btw, you can grab these slides and all the example code from
+https://github.com/jdpage/repro-python-talk after)
+
+
+* 3 Pieces to Mix & Match
+
+** Virtual Environments
+** Dependency Managers
+** Containers
+
+
+* Virtual Environments
+
+  * A particular Python version + particular packages
+  * Multiple “venvs” can coexist peacefully
+  * Built into Python already!
+
+
+* Dependency Managers
+
+  * Poetry @ https://python-poetry.org/
+  * Creates a venv for your project
+  * Lets you install packages into it
+  * Remembers what packages you installed
+  * Can recreate your venv from scratch automatically
+
+
+* Containers
+
+  * Singularity @ https://sylabs.io/singularity/
+  * A Linux For Every Occasion
+  * Make one file that has your whole runtime
+  * Handy for moving your code to a beefier machine
+
+
+* Mix & Match
+
+  * Containers overkill? Just use Poetry by itself!
+  * (and containerize later if you change your mind)
+  * Don't need Poetry? Containerize your existing workflow!
+
+
+* Get Started
+
+  Create a new Poetry project; we'll just accept the defaults for now:
+
+  #+BEGIN_SRC shell
+    poetry new --src repro-python
+    cd repro-python
+  #+END_SRC
+
+* Get Starteder
+
+  Make sure we add the ipykernel to it:
+
+  #+BEGIN_SRC shell
+    poetry add --lock ipykernel
+  #+END_SRC
+
+* Get Startedest
+
+  Initialize Git with a default gitignore:
+
+  #+BEGIN_SRC shell
+    git init
+    curl -sSL -o .gitignore \
+         https://raw.githubusercontent.com/github/gitignore/master/Python.gitignore
+    git add .
+  #+END_SRC
+
+* Pull in Jupyter
+
+  https://jupyter-docker-stacks.readthedocs.io
+
+  #+BEGIN_SRC shell
+    cat > repro-python.def <<EOF
+    Bootstrap: docker
+    From: jupyter/minimal-notebook:8d32a5208ca1
+    EOF
+  #+END_SRC
+
+* Add more stuff
+
+  #+BEGIN_SRC shell
+    cat >> repro-python.def <<EOF
+
+    %post
+      apt update && apt install -y python3-distutils && apt clean
+      mamba install --quiet --yes 'poetry=1.1.*' 'ipywidgets=7.6.*' 'ipympl=0.7.*' 'widgetsnbextension=3.5.*'
+    EOF
+  #+END_SRC
+
+* But not too much stuff
+
+  #+BEGIN_SRC shell
+    cat >> repro-python.def <<EOF
+      mamba clean --all -f -y
+    EOF
+  #+END_SRC
+
+* Trickiness
+
+  (we'll register the kernel at startup)
+
+  #+BEGIN_SRC shell
+    cat >> repro-python.def <<EOF
+      echo "c.MappingKernelManager.default_kernel_name='singularity'" > /jupyter-conf.py
+    EOF
+  #+END_SRC
+
+* Poetry!!!
+
+  #+BEGIN_SRC shell
+    cat >> repro-python.def <<EOF
+
+    %environment
+      export POETRY_VIRTUALENVS_IN_PROJECT=1
+
+    %runscript
+      poetry install
+    EOF
+  #+END_SRC
+
+* Register Kernel
+
+  #+BEGIN_SRC shell
+    cat >> repro-python.def <<EOF
+      poetry run python -m ipykernel install --user --name=singularity
+    EOF
+  #+END_SRC
+
+* Tie things up
+
+  #+BEGIN_SRC shell
+    cat >> repro-python.def <<EOF
+      jupyter lab --config=/jupyter-conf.py
+      jupyter kernelspec remove -f singularity
+    EOF
+
+    git add repro-python.def
+  #+END_SRC
+
+* Build the Container
+
+  #+BEGIN_SRC shell
+    singularity build -f repro-python.sif repro-python.def
+  #+END_SRC
+
+  We don't want that in Git, so we'll add it to the gitignore file as well.
+
+  #+BEGIN_SRC shell
+    echo "*.sif" >> .gitignore
+    git add .gitignore
+  #+END_SRC
+
+
